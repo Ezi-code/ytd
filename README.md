@@ -2,8 +2,8 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/ytdown)](https://pypi.org/project/ytdown/)
 [![Python versions](https://img.shields.io/pypi/pyversions/ytdown)](https://pypi.org/project/ytdown/)
-[![CI](https://github.com/ezra/ytdown/actions/workflows/ci.yml/badge.svg)](https://github.com/ezra/ytdown/actions/workflows/ci.yml)
-[![License](https://img.shields.io/pypi/l/ytdown)](https://github.com/ezra/ytdown/blob/main/LICENSE)
+[![CI](https://github.com/ezi-code/ytd/actions/workflows/ci.yml/badge.svg)](https://github.com/ezi-code/ytd/actions/workflows/ci.yml)
+[![License](https://img.shields.io/pypi/l/ytdown)](https://github.com/ezi-code/ytd/blob/main/LICENSE)
 
 A cross-platform YouTube downloader CLI that saves **MP3** files to your **Music** folder and **MP4** files to your **Videos / Movies** folder — with full playlist support.
 
@@ -66,13 +66,13 @@ ytd https://youtube.com/watch?v=abc123 mp3 -o "./my songs"
 ### Via `uv` (recommended)
 
 ```bash
-uv tool install git+https://github.com/ezra/ytdown
+uv tool install git+https://github.com/ezi-code/ytd
 ```
 
 Or from a local copy:
 
 ```bash
-git clone https://github.com/ezra/ytdown
+git clone https://github.com/ezi-code/ytd
 cd ytdown
 uv tool install -e .
 ```
@@ -88,7 +88,7 @@ pip install ytdown
 ### Via `pip` (editable, for development)
 
 ```bash
-git clone https://github.com/ezra/ytdown
+git clone https://github.com/ezi-code/ytd
 cd ytdown
 pip install -e .
 ```
@@ -116,7 +116,7 @@ Target directories are created on first use if they do not exist.
 ## Development
 
 ```bash
-git clone https://github.com/ezra/ytdown
+git clone https://github.com/ezi-code/ytd
 cd ytdown
 uv sync
 ```
