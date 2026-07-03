@@ -1,0 +1,19 @@
+[project]
+name = "ytdown"
+version = "0.1.0"
+description = "Cross-platform YouTube downloader — MP4 to Videos, MP3 to Music"
+requires-python = ">=3.14"
+dependencies = [
+    "pre-commit",
+    "yt-dlp>=2026.6.9",
+]
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+ytd = "ytd:main"
+
+[tool.uv]
+package = true

@@ -1,0 +1,2 @@
+[console_scripts]
+ytd = ytd:main
