@@ -2,18 +2,35 @@
 name = "ytdown"
 version = "0.1.0"
 description = "Cross-platform YouTube downloader — MP4 to Videos, MP3 to Music"
-requires-python = ">=3.14"
-dependencies = [
-    "pre-commit",
-    "yt-dlp>=2026.6.9",
-]
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Ezra", email = "ezra@example.com" }]
+requires-python = ">=3.8"
+dependencies = ["yt-dlp"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video :: Conversion",
+    "Topic :: Multimedia :: Sound/Audio :: Conversion",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ezra/ytdown"
+Repository = "https://github.com/ezra/ytdown"
 
 [project.scripts]
 ytd = "ytd:main"
 
-[tool.uv]
-package = true
+[tool.setuptools]
+py-modules = ["ytd"]
+
+[dependency-groups]
+dev = ["pre-commit", "ruff", "codespell"]

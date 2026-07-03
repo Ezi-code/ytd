@@ -1,2 +1,0 @@
-pre-commit
-yt-dlp>=2026.6.9

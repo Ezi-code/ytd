@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-ytd.py
-ytdown.egg-info/PKG-INFO
-ytdown.egg-info/SOURCES.txt
-ytdown.egg-info/dependency_links.txt
-ytdown.egg-info/entry_points.txt
-ytdown.egg-info/requires.txt
-ytdown.egg-info/top_level.txt

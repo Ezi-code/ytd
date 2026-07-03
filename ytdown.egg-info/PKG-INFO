@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: ytdown
-Version: 0.1.0
-Summary: Cross-platform YouTube downloader — MP4 to Videos, MP3 to Music
-Classifier: Operating System :: OS Independent
-Classifier: Programming Language :: Python :: 3
-Requires-Python: >=3.14
-Requires-Dist: pre-commit
-Requires-Dist: yt-dlp>=2026.6.9

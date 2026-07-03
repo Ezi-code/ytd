@@ -6,18 +6,19 @@ import os
 import platform
 import shutil
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 import yt_dlp
 
 
-def _speed_opts():
-    opts = {
+def _speed_opts() -> Dict[str, Any]:
+    opts: Dict[str, Any] = {
         "concurrent_fragment_downloads": 10,
         "socket_timeout": 30,
         "retries": 10,
         "fragment_retries": 10,
     }
-    aria2c = shutil.which("aria2c")
+    aria2c: Optional[str] = shutil.which("aria2c")
     if aria2c:
         opts["external_downloader"] = "aria2c"
         opts["external_downloader_args"] = [
@@ -33,14 +34,14 @@ def _speed_opts():
     return opts
 
 
-def _get_music_dir():
-    system = platform.system()
+def _get_music_dir() -> Path:
+    system: str = platform.system()
     if system == "Linux":
-        xdg_config = Path.home() / ".config" / "user-dirs.dirs"
+        xdg_config: Path = Path.home() / ".config" / "user-dirs.dirs"
         if xdg_config.exists():
             for line in xdg_config.read_text().splitlines():
                 if line.startswith("XDG_MUSIC_DIR="):
-                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    val: str = line.split("=", 1)[1].strip().strip('"').strip("'")
                     val = os.path.expandvars(val)
                     return Path(val)
         return Path.home() / "Music"
@@ -51,14 +52,14 @@ def _get_music_dir():
     return Path.home() / "Music"
 
 
-def _get_videos_dir():
-    system = platform.system()
+def _get_videos_dir() -> Path:
+    system: str = platform.system()
     if system == "Linux":
-        xdg_config = Path.home() / ".config" / "user-dirs.dirs"
+        xdg_config: Path = Path.home() / ".config" / "user-dirs.dirs"
         if xdg_config.exists():
             for line in xdg_config.read_text().splitlines():
                 if line.startswith("XDG_VIDEOS_DIR="):
-                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    val: str = line.split("=", 1)[1].strip().strip('"').strip("'")
                     val = os.path.expandvars(val)
                     return Path(val)
         return Path.home() / "Videos"
@@ -69,20 +70,25 @@ def _get_videos_dir():
     return Path.home() / "Videos"
 
 
-_VALID_AUDIO_CODECS = {"mp3", "aac", "flac", "opus", "m4a", "wav", "best"}
+_VALID_AUDIO_CODECS: set = {"mp3", "aac", "flac", "opus", "m4a", "wav", "best"}
 
 
-def _download_mp3(url, codec="mp3", output_dir=None, playlist_opts=None):
+def _download_mp3(
+    url: str,
+    codec: str = "mp3",
+    output_dir: Optional[str] = None,
+    playlist_opts: Optional[Dict[str, Any]] = None,
+) -> None:
     if codec == "ffmpeg":
         codec = "mp3"
     if codec not in _VALID_AUDIO_CODECS:
         print(f"Invalid audio codec '{codec}'. Using 'mp3'.")
         codec = "mp3"
 
-    output_path = Path(output_dir) if output_dir else _get_music_dir()
+    output_path: Path = Path(output_dir) if output_dir else _get_music_dir()
     output_path.mkdir(parents=True, exist_ok=True)
 
-    ydl_opts = {
+    ydl_opts: Dict[str, Any] = {
         "outtmpl": str(output_path / "%(title)s.%(ext)s"),
         "quiet": False,
         "no_warnings": True,
@@ -109,11 +115,15 @@ def _download_mp3(url, codec="mp3", output_dir=None, playlist_opts=None):
         print(f"Error: {str(e)}")
 
 
-def _download_mp4(url, output_dir=None, playlist_opts=None):
-    output_path = Path(output_dir) if output_dir else _get_videos_dir()
+def _download_mp4(
+    url: str,
+    output_dir: Optional[str] = None,
+    playlist_opts: Optional[Dict[str, Any]] = None,
+) -> None:
+    output_path: Path = Path(output_dir) if output_dir else _get_videos_dir()
     output_path.mkdir(parents=True, exist_ok=True)
 
-    ydl_opts = {
+    ydl_opts: Dict[str, Any] = {
         "outtmpl": str(output_path / "%(title)s.%(ext)s"),
         "quiet": False,
         "no_warnings": True,
@@ -134,8 +144,12 @@ def _download_mp4(url, output_dir=None, playlist_opts=None):
 
 
 def download_youtube(
-    url, format_type="mp4", codec=None, output_dir=None, playlist_opts=None
-):
+    url: str,
+    format_type: str = "mp4",
+    codec: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    playlist_opts: Optional[Dict[str, Any]] = None,
+) -> None:
     if format_type.lower() == "mp3":
         _download_mp3(url, codec or "mp3", output_dir, playlist_opts)
     elif format_type.lower() == "mp4":
@@ -144,8 +158,8 @@ def download_youtube(
         print("Invalid format. Use 'mp4' or 'mp3'.")
 
 
-def _build_playlist_opts(args):
-    opts = {}
+def _build_playlist_opts(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
+    opts: Dict[str, Any] = {}
     if args.no_playlist:
         opts["noplaylist"] = True
     if args.playlist_start is not None:
@@ -157,7 +171,7 @@ def _build_playlist_opts(args):
     return opts or None
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         prog="ytd",
         description="Download YouTube videos as MP4 (Videos) or MP3 (Music).",
@@ -209,8 +223,8 @@ def main():
         help="Custom output directory (overrides default Music/Videos folder)",
     )
 
-    args = parser.parse_args()
-    playlist_opts = _build_playlist_opts(args)
+    args: argparse.Namespace = parser.parse_args()
+    playlist_opts: Optional[Dict[str, Any]] = _build_playlist_opts(args)
     download_youtube(args.url, args.format, args.codec, args.output_dir, playlist_opts)
 
 
