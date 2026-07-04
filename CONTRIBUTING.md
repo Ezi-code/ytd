@@ -31,7 +31,7 @@ Harassment, trolling, personal attacks, and other disrespectful behavior will no
 
 ```bash
 git clone https://github.com/your-username/ytdown
-cd ytdown
+cd ytd
 uv sync
 ```
 
