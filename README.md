@@ -73,7 +73,7 @@ Or from a local copy:
 
 ```bash
 git clone https://github.com/ezi-code/ytd
-cd ytdown
+cd ytd
 uv tool install -e .
 ```
 
@@ -117,7 +117,7 @@ Target directories are created on first use if they do not exist.
 
 ```bash
 git clone https://github.com/ezi-code/ytd
-cd ytdown
+cd ytd
 uv sync
 ```
 
