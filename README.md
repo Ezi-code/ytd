@@ -79,20 +79,6 @@ uv tool install -e .
 
 Now `ytd` is available globally.
 
-### Via `pip`
-
-```bash
-pip install ytdown
-```
-
-### Via `pip` (editable, for development)
-
-```bash
-git clone https://github.com/ezi-code/ytd
-cd ytdown
-pip install -e .
-```
-
 ## Cross-platform folder mapping
 
 ytdown detects your operating system and uses the platform-standard media directories:
