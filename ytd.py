@@ -13,7 +13,8 @@ import yt_dlp
 
 def _speed_opts() -> Dict[str, Any]:
     opts: Dict[str, Any] = {
-        "concurrent_fragment_downloads": 10,
+        "concurrent_fragment_downloads": 16,
+        "http_chunk_size": "10M",
         "socket_timeout": 30,
         "retries": 10,
         "fragment_retries": 10,
@@ -24,8 +25,13 @@ def _speed_opts() -> Dict[str, Any]:
         opts["external_downloader_args"] = [
             "-x",
             "16",
+            "-s",
+            "16",
             "-k",
             "1M",
+            "--file-allocation=none",
+            "--allow-overwrite=true",
+            "--continue=true",
             "--min-split-size",
             "1M",
             "--max-connection-per-server",
@@ -127,7 +133,7 @@ def _download_mp4(
         "outtmpl": str(output_path / "%(title)s.%(ext)s"),
         "quiet": False,
         "no_warnings": True,
-        "format": "bestvideo+bestaudio/best",
+        "format": "bv*+ba/b",
         "merge_output_format": "mp4",
         **_speed_opts(),
     }

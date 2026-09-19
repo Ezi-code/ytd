@@ -27,10 +27,11 @@ class TestSpeedOpts(unittest.TestCase):
     @patch.object(shutil, "which", return_value=None)
     def test_without_aria2(self, mock_which):
         opts = _speed_opts()
-        self.assertEqual(opts["concurrent_fragment_downloads"], 10)
+        self.assertEqual(opts["concurrent_fragment_downloads"], 16)
         self.assertEqual(opts["socket_timeout"], 30)
         self.assertEqual(opts["retries"], 10)
         self.assertEqual(opts["fragment_retries"], 10)
+        self.assertEqual(opts["http_chunk_size"], "10M")
         self.assertNotIn("external_downloader", opts)
 
     @patch.object(shutil, "which", return_value="/usr/bin/aria2c")
@@ -38,7 +39,9 @@ class TestSpeedOpts(unittest.TestCase):
         opts = _speed_opts()
         self.assertEqual(opts["external_downloader"], "aria2c")
         self.assertIn("-x", opts["external_downloader_args"])
+        self.assertIn("-s", opts["external_downloader_args"])
         self.assertIn("16", opts["external_downloader_args"])
+        self.assertIn("--file-allocation=none", opts["external_downloader_args"])
 
 
 class TestGetMusicDir(unittest.TestCase):
@@ -253,6 +256,7 @@ class TestDownloadMp4(unittest.TestCase):
         _download_mp4("http://example.com")
         ydl_opts = mock_ydl.call_args[0][0]
         self.assertIn("/fake/Videos", ydl_opts["outtmpl"])
+        self.assertEqual(ydl_opts["format"], "bv*+ba/b")
 
     @patch("pathlib.Path.mkdir")
     @patch("ytd._speed_opts", return_value={})
