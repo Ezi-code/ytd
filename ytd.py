@@ -5,10 +5,17 @@ import argparse
 import os
 import platform
 import shutil
+import subprocess
+import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yt_dlp
+
+__version__ = "0.1.2"
+
+_GITHUB_REPO = "ezi-code/ytd"
+_GIT_URL = f"git+https://github.com/{_GITHUB_REPO}"
 
 
 def _speed_opts() -> Dict[str, Any]:
@@ -164,6 +171,32 @@ def download_youtube(
         print("Invalid format. Use 'mp4' or 'mp3'.")
 
 
+def _build_update_command() -> List[str]:
+    uv: Optional[str] = shutil.which("uv")
+    if uv:
+        return [uv, "tool", "install", "--force", "--refresh", _GIT_URL]
+    return [sys.executable, "-m", "pip", "install", "--force-reinstall", _GIT_URL]
+
+
+def run_update() -> int:
+    """Reinstall ytd from the latest GitHub main branch. Returns exit code."""
+    cmd: List[str] = _build_update_command()
+    print(f"Updating ytd to the latest version from GitHub ({_GITHUB_REPO})...")
+    try:
+        result: subprocess.CompletedProcess = subprocess.run(cmd, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"Update failed: {e}. Try manually: {' '.join(cmd)}")
+        return 1
+    if result.returncode == 0:
+        print("Update completed successfully!")
+    else:
+        print(
+            f"Update failed (exit code {result.returncode}). "
+            f"Try manually: {' '.join(cmd)}"
+        )
+    return result.returncode
+
+
 def _build_playlist_opts(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
     opts: Dict[str, Any] = {}
     if args.no_playlist:
@@ -182,7 +215,12 @@ def main() -> None:
         prog="ytd",
         description="Download YouTube videos as MP4 (Videos) or MP3 (Music).",
     )
-    parser.add_argument("url", help="YouTube video or playlist URL")
+    parser.add_argument(
+        "url",
+        nargs="?",
+        default=None,
+        help="YouTube video or playlist URL",
+    )
     parser.add_argument(
         "format",
         nargs="?",
@@ -195,6 +233,16 @@ def main() -> None:
         nargs="?",
         default=None,
         help="Audio codec for MP3 downloads: mp3, aac, flac, opus, m4a, wav, best (default: mp3)",
+    )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="Update ytd to the latest version from GitHub and exit",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
     playlist = parser.add_argument_group("playlist options")
@@ -230,6 +278,10 @@ def main() -> None:
     )
 
     args: argparse.Namespace = parser.parse_args()
+    if args.update:
+        raise SystemExit(run_update())
+    if not args.url:
+        parser.error("the following arguments are required: url")
     playlist_opts: Optional[Dict[str, Any]] = _build_playlist_opts(args)
     download_youtube(args.url, args.format, args.codec, args.output_dir, playlist_opts)
 

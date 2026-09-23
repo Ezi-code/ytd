@@ -47,6 +47,14 @@ ytd https://youtube.com/watch?v=abc123 mp4 -o ~/Desktop
 ytd https://youtube.com/watch?v=abc123 mp3 -o "./my songs"
 ```
 
+### Updating
+
+```bash
+ytd --update
+```
+
+Since `ytdown` is not on PyPI yet, this reinstalls `ytd` from the latest GitHub changes (`uv tool install --force --refresh git+https://github.com/ezi-code/ytd`, with a `pip` fallback if `uv` is unavailable).
+
 ## Installation
 
 ### Prerequisites
