@@ -7,12 +7,15 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
+import traceback
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import yt_dlp
+from yt_dlp.utils import format_bytes
 
-__version__ = "0.1.2"
+__version__ = "0.1.2a"
 
 _GITHUB_REPO = "ezi-code/ytd"
 _GIT_URL = f"git+https://github.com/{_GITHUB_REPO}"
@@ -21,7 +24,7 @@ _GIT_URL = f"git+https://github.com/{_GITHUB_REPO}"
 def _speed_opts() -> Dict[str, Any]:
     opts: Dict[str, Any] = {
         "concurrent_fragment_downloads": 16,
-        "http_chunk_size": "10M",
+        "http_chunk_size": 10 * 1024 * 1024,
         "socket_timeout": 30,
         "retries": 10,
         "fragment_retries": 10,
@@ -85,6 +88,136 @@ def _get_videos_dir() -> Path:
 
 _VALID_AUDIO_CODECS: set = {"mp3", "aac", "flac", "opus", "m4a", "wav", "best"}
 
+_BAR_WIDTH = 25
+_PROGRESS_THROTTLE = 0.1
+
+
+def _format_speed(speed: Optional[float]) -> str:
+    if not speed:
+        return "--/s"
+    return f"{format_bytes(speed)}/s"
+
+
+def _format_eta(eta: Optional[float]) -> str:
+    if eta is None:
+        return "--"
+    try:
+        eta = int(eta)
+    except (TypeError, ValueError):
+        return "--"
+    minutes, seconds = divmod(eta, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:d}:{seconds:02d}"
+
+
+def _render_bar(prefix: str, fraction: float, detail: str) -> None:
+    fraction = max(0.0, min(1.0, fraction or 0.0))
+    filled: int = int(fraction * _BAR_WIDTH)
+    bar: str = "#" * filled + "-" * (_BAR_WIDTH - filled)
+    sys.stdout.write(f"\r{prefix}: [{bar}] {fraction * 100:5.1f}% {detail}")
+    sys.stdout.flush()
+
+
+def _make_progress_hook(label: str = "Downloading") -> Callable[[Dict[str, Any]], None]:
+    """Single-line progress bar hook; handles playlists via filename changes."""
+    state: Dict[str, Any] = {"filename": None, "last": 0.0}
+
+    def hook(d: Dict[str, Any]) -> None:
+        status: Optional[str] = d.get("status")
+        if status == "downloading":
+            filename: Optional[str] = d.get("filename")
+            if filename != state["filename"]:
+                if state["filename"] is not None:
+                    sys.stdout.write("\n")
+                title: str = str(
+                    ((d.get("info_dict") or {}).get("title")) or filename or "file"
+                )
+                if len(title) > 60:
+                    title = title[:57] + "..."
+                sys.stdout.write(f"{label}: {title}\n")
+                state["filename"] = filename
+                state["last"] = 0.0
+            downloaded: int = d.get("downloaded_bytes") or 0
+            total: Optional[int] = d.get("total_bytes") or d.get("total_bytes_estimate")
+            now: float = time.monotonic()
+            if total:
+                fraction: float = downloaded / total
+                if now - state["last"] < _PROGRESS_THROTTLE and fraction < 1.0:
+                    return
+                state["last"] = now
+                detail: str = (
+                    f"{format_bytes(downloaded)}/{format_bytes(total)} "
+                    f"at {_format_speed(d.get('speed'))} "
+                    f"ETA {_format_eta(d.get('eta'))}"
+                )
+                _render_bar(label, fraction, detail)
+            else:
+                if now - state["last"] < _PROGRESS_THROTTLE:
+                    return
+                state["last"] = now
+                frag_idx: Optional[int] = d.get("fragment_index")
+                frag_count: Optional[int] = d.get("fragment_count")
+                if frag_idx is not None and frag_count:
+                    _render_bar(
+                        label,
+                        frag_idx / frag_count,
+                        f"fragment {frag_idx}/{frag_count} "
+                        f"{format_bytes(downloaded)} "
+                        f"at {_format_speed(d.get('speed'))}",
+                    )
+                else:
+                    _render_bar(
+                        label,
+                        0.0,
+                        f"{format_bytes(downloaded)} "
+                        f"at {_format_speed(d.get('speed'))}",
+                    )
+        elif status == "finished":
+            total = d.get("total_bytes") or d.get("downloaded_bytes")
+            if total:
+                _render_bar(
+                    label,
+                    1.0,
+                    f"{format_bytes(total)}/{format_bytes(total)}",
+                )
+            sys.stdout.write("\nDownload complete.\n")
+            sys.stdout.flush()
+            state["filename"] = None
+            state["last"] = 0.0
+        elif status == "error":
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            state["filename"] = None
+
+    return hook
+
+
+def _make_postprocessor_hook(
+    start_msg: str, done_msg: str
+) -> Callable[[Dict[str, Any]], None]:
+    """Announce conversion/merge stages; ignore bookkeeping PPs."""
+
+    def hook(d: Dict[str, Any]) -> None:
+        pp: str = str(d.get("postprocessor") or "")
+        if pp and not (
+            "ExtractAudio" in pp
+            or "Merger" in pp
+            or "Converter" in pp
+            or "Remuxer" in pp
+        ):
+            return
+        status: Optional[str] = d.get("status")
+        if status == "started":
+            sys.stdout.write(f"{start_msg}...\n")
+            sys.stdout.flush()
+        elif status == "finished":
+            sys.stdout.write(f"{done_msg}\n")
+            sys.stdout.flush()
+
+    return hook
+
 
 def _download_mp3(
     url: str,
@@ -103,8 +236,10 @@ def _download_mp3(
 
     ydl_opts: Dict[str, Any] = {
         "outtmpl": str(output_path / "%(title)s.%(ext)s"),
-        "quiet": False,
+        "quiet": True,
+        "verbose": False,
         "no_warnings": True,
+        "noprogress": True,
         "format": "bestaudio/best",
         "postprocessors": [
             {
@@ -113,7 +248,12 @@ def _download_mp3(
                 "preferredquality": "192",
             }
         ],
-        "postprocessor_args": ["-q:a", "0"],
+        "progress_hooks": [_make_progress_hook()],
+        "postprocessor_hooks": [
+            _make_postprocessor_hook(
+                f"Converting to {codec.upper()}", "Conversion complete."
+            )
+        ],
         **_speed_opts(),
     }
     if playlist_opts:
@@ -125,7 +265,8 @@ def _download_mp3(
             ydl.download([url])
         print("Download completed successfully!")
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error: {e!s}")
+        traceback.print_exc()
 
 
 def _download_mp4(
@@ -138,10 +279,16 @@ def _download_mp4(
 
     ydl_opts: Dict[str, Any] = {
         "outtmpl": str(output_path / "%(title)s.%(ext)s"),
-        "quiet": False,
+        "quiet": True,
+        "verbose": False,
         "no_warnings": True,
+        "noprogress": True,
         "format": "bv*+ba/b",
         "merge_output_format": "mp4",
+        "progress_hooks": [_make_progress_hook()],
+        "postprocessor_hooks": [
+            _make_postprocessor_hook("Merging formats", "Merge complete.")
+        ],
         **_speed_opts(),
     }
     if playlist_opts:
@@ -153,7 +300,8 @@ def _download_mp4(
             ydl.download([url])
         print("Download completed successfully!")
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error: {e!s}")
+        traceback.print_exc()
 
 
 def download_youtube(

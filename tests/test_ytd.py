@@ -1,7 +1,9 @@
 import argparse
+import io
 import platform
 import shutil
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,8 +12,12 @@ from ytd import (
     _build_playlist_opts,
     _download_mp3,
     _download_mp4,
+    _format_eta,
+    _format_speed,
     _get_music_dir,
     _get_videos_dir,
+    _make_postprocessor_hook,
+    _make_progress_hook,
     _speed_opts,
     download_youtube,
 )
@@ -31,8 +37,25 @@ class TestSpeedOpts(unittest.TestCase):
         self.assertEqual(opts["socket_timeout"], 30)
         self.assertEqual(opts["retries"], 10)
         self.assertEqual(opts["fragment_retries"], 10)
-        self.assertEqual(opts["http_chunk_size"], "10M")
+        self.assertEqual(opts["http_chunk_size"], 10 * 1024 * 1024)
         self.assertNotIn("external_downloader", opts)
+
+    def test_speed_opt_numerics_are_ints(self):
+        # Regression test: yt-dlp's Python API expects ints (bytes) for
+        # these options. A CLI-style string like "10M" reaches
+        # downloader/http.py `chunk_size * 0.95` and raises
+        # "can't multiply sequence by non-int of type 'float'".
+        opts = _speed_opts()
+        for key in (
+            "concurrent_fragment_downloads",
+            "http_chunk_size",
+            "socket_timeout",
+            "retries",
+            "fragment_retries",
+        ):
+            self.assertIsInstance(
+                opts[key], int, f"{key} must be int, got {opts[key]!r}"
+            )
 
     @patch.object(shutil, "which", return_value="/usr/bin/aria2c")
     def test_with_aria2(self, mock_which):
@@ -246,6 +269,26 @@ class TestDownloadMp3(unittest.TestCase):
         self.assertEqual(ydl_opts["playliststart"], 2)
         self.assertEqual(ydl_opts["playlistend"], 5)
 
+    @patch("pathlib.Path.mkdir")
+    @patch("ytd._get_music_dir", return_value=Path("/fake/Music"))
+    @patch("yt_dlp.YoutubeDL")
+    def test_passes_int_http_chunk_size(self, mock_ydl, mock_music_dir, mock_mkdir):
+        # Uses the real _speed_opts (not mocked to {}) so a string
+        # http_chunk_size regression is caught here.
+        _download_mp3("http://example.com")
+        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertIsInstance(ydl_opts["http_chunk_size"], int)
+
+    @patch("pathlib.Path.mkdir")
+    @patch("ytd._get_music_dir", return_value=Path("/fake/Music"))
+    @patch("yt_dlp.YoutubeDL")
+    def test_no_conflicting_quality_args(self, mock_ydl, mock_music_dir, mock_mkdir):
+        # preferredquality "192" already sets -b:a 192k via
+        # FFmpegExtractAudio; a global "-q:a 0" (VBR scale) conflicts.
+        _download_mp3("http://example.com")
+        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertNotIn("postprocessor_args", ydl_opts)
+
 
 class TestDownloadMp4(unittest.TestCase):
     @patch("pathlib.Path.mkdir")
@@ -279,6 +322,109 @@ class TestDownloadMp4(unittest.TestCase):
         )
         ydl_opts = mock_ydl.call_args[0][0]
         self.assertEqual(ydl_opts["max_downloads"], 3)
+
+
+class TestQuietProgressOpts(unittest.TestCase):
+    @patch("pathlib.Path.mkdir")
+    @patch("ytd._get_music_dir", return_value=Path("/fake/Music"))
+    @patch("ytd._speed_opts", return_value={})
+    @patch("yt_dlp.YoutubeDL")
+    def test_mp3_uses_quiet_progress_hooks(
+        self, mock_ydl, mock_speed, mock_music_dir, mock_mkdir
+    ):
+        _download_mp3("http://example.com")
+        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertTrue(ydl_opts["quiet"])
+        self.assertTrue(ydl_opts["noprogress"])
+        self.assertTrue(ydl_opts["progress_hooks"])
+        self.assertTrue(ydl_opts["postprocessor_hooks"])
+
+    @patch("pathlib.Path.mkdir")
+    @patch("ytd._get_videos_dir", return_value=Path("/fake/Videos"))
+    @patch("ytd._speed_opts", return_value={})
+    @patch("yt_dlp.YoutubeDL")
+    def test_mp4_uses_quiet_progress_hooks(
+        self, mock_ydl, mock_speed, mock_videos_dir, mock_mkdir
+    ):
+        _download_mp4("http://example.com")
+        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertTrue(ydl_opts["quiet"])
+        self.assertTrue(ydl_opts["noprogress"])
+        self.assertTrue(ydl_opts["progress_hooks"])
+        self.assertTrue(ydl_opts["postprocessor_hooks"])
+
+
+class TestProgressHook(unittest.TestCase):
+    def test_downloading_renders_bar(self):
+        hook = _make_progress_hook()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            hook(
+                {
+                    "status": "downloading",
+                    "filename": "/tmp/a.mp3",
+                    "downloaded_bytes": 5 * 1024 * 1024,
+                    "total_bytes": 10 * 1024 * 1024,
+                    "speed": 1024 * 1024,
+                    "eta": 5,
+                    "info_dict": {"title": "Some Video"},
+                }
+            )
+        out = buf.getvalue()
+        self.assertIn("Downloading: Some Video", out)
+        self.assertIn("50.0%", out)
+
+    def test_downloading_unknown_total(self):
+        hook = _make_progress_hook()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            hook(
+                {
+                    "status": "downloading",
+                    "filename": "/tmp/a.mp3",
+                    "downloaded_bytes": 1024,
+                    "total_bytes": None,
+                    "total_bytes_estimate": None,
+                    "speed": None,
+                    "eta": None,
+                    "info_dict": {},
+                }
+            )
+        self.assertIn("Downloading", buf.getvalue())
+
+    def test_finished_and_error(self):
+        hook = _make_progress_hook()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            hook({"status": "finished", "filename": "/tmp/a.mp3"})
+            hook({"status": "error", "filename": "/tmp/a.mp3"})
+        self.assertIn("Download complete.", buf.getvalue())
+
+    def test_format_helpers(self):
+        self.assertEqual(_format_speed(None), "--/s")
+        self.assertIn("/s", _format_speed(1024))
+        self.assertEqual(_format_eta(None), "--")
+        self.assertEqual(_format_eta(65), "1:05")
+
+
+class TestPostprocessorHook(unittest.TestCase):
+    def test_announces_ffmpeg_pp(self):
+        hook = _make_postprocessor_hook("Converting to MP3", "Conversion complete.")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            hook({"status": "started", "postprocessor": "FFmpegExtractAudio"})
+            hook({"status": "finished", "postprocessor": "FFmpegExtractAudio"})
+        out = buf.getvalue()
+        self.assertIn("Converting to MP3...", out)
+        self.assertIn("Conversion complete.", out)
+
+    def test_ignores_bookkeeping_pp(self):
+        hook = _make_postprocessor_hook("Converting to MP3", "Conversion complete.")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            hook({"status": "started", "postprocessor": "MoveFiles"})
+            hook({"status": "finished", "postprocessor": "MoveFiles"})
+        self.assertEqual(buf.getvalue(), "")
 
 
 if __name__ == "__main__":
